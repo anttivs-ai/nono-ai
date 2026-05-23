@@ -1,0 +1,23 @@
+{
+  // Profile for Continue CLI (`cn`). Mirrors the opencode profile structurally
+  // but for ~/.continue and a distinct OAuth callback port.
+
+  "$schema": "./nono-profile.schema.json",
+  "extends": "nono-ai-base",
+  "meta": { "name": "nono-ai-continue" },
+
+  "filesystem": {
+    "allow": ["$HOME/.continue"]
+  },
+
+  "network": {
+    "allow_domain": [
+      "claude.ai",
+      "api.anthropic.com",
+      "consensus.app",
+      "selfdecode.com",
+      "learning.oreilly.com"
+    ],
+    "listen_port": [49153]
+  }
+}

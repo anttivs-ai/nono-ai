@@ -1,0 +1,33 @@
+{
+  // Profile for OpenCode. Carries all OpenCode state directories from the
+  // colima-docker-ai mount list. listen_port is a single pinned port for
+  // OAuth callbacks — OpenCode must be configured to bind to it (see
+  // README "OAuth callback ports").
+
+  "$schema": "./nono-profile.schema.json",
+  "extends": "nono-ai-base",
+  "meta": { "name": "nono-ai-opencode" },
+
+  "filesystem": {
+    "allow": [
+      "$HOME/.config/opencode",         // opencode.json
+      "$HOME/.local/share/opencode",    // auth.json + session DB
+      "$HOME/.local/state/opencode"     // runtime state
+    ]
+  },
+
+  "network": {
+    "allow_domain": [
+      "claude.ai",
+      "api.anthropic.com",
+      // MCP OAuth providers — expand to *.consensus.app etc. if subdomain
+      // redirects appear during initial auth.
+      "consensus.app",
+      "selfdecode.com",
+      "learning.oreilly.com"
+    ],
+    // OAuth localhost callback port. Single int because nono's port-range
+    // support is unconfirmed; expand to a range later if supported.
+    "listen_port": [49152]
+  }
+}
