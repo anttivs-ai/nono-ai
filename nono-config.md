@@ -47,13 +47,17 @@ Runtime execution of the installed CLIs is then constrained again by the per-CLI
 
 The npm prefix `$HOME/.local/share/nono-ai/npm` is **not** on the user's `$PATH`. The Makefile and shell helpers invoke binaries by absolute path (`$PREFIX/bin/claude`). This prevents a compromised CLI from leaving a malicious shim that gets picked up by an unsandboxed shell.
 
-## Why `env_credentials` over env-inheritance
+## Why no 1Password credentials are injected by default
 
-The Docker setup captures `OP_SERVICE_ACCOUNT_TOKEN` via `op read` on the host shell and passes it to the container via env-var inheritance (`docker run -e OP_SERVICE_ACCOUNT_TOKEN`, no `=value`). This is the safest pattern docker offers because the token never appears on a command line.
+The original design here was symmetric to colima-docker-ai's: inject `OP_SERVICE_ACCOUNT_TOKEN` via nono's `env_credentials` so sandboxed CLIs could call `op` for ad-hoc secret retrieval, with the token never touching the host shell environment. nono v0.57 rejects this outright — it has a hardcoded list of "dangerous environment variables" (master credentials whose presence in a sandboxed process effectively voids the sandbox), and `OP_SERVICE_ACCOUNT_TOKEN` is on that list. There is no override flag.
 
-nono offers something better: `env_credentials` reads an `op://...` URI at process startup and injects the resulting secret as a named env var inside the sandbox. The token never enters the user's shell environment, never appears in `op read` output, and never crosses any IPC boundary the user controls. The 1Password desktop app's existing auth (the same one used by the colima-docker-ai `op read`) provides the credential.
+The current profile therefore omits `env_credentials` entirely. Two ways to put `op` access back if it becomes blocking:
 
-The cost: the `op://...` URI is hardcoded in `profiles/nono-ai-base.jsonc`. Users with a different vault entry edit the profile. The Docker setup's `OP_ITEM` runtime override is lost — but the cleaner static configuration is worth it.
+1. **Per-secret narrow mappings.** Replace the would-be master-token entry with one mapping per secret the sandboxed CLI actually needs, each going to its own env var: `{"op://AI/anthropic-api/key": "ANTHROPIC_API_KEY"}`. Sandbox compromise leaks only the listed secrets, not the vault. Requires enumerating what each CLI needs.
+
+2. **Desktop CLI socket forwarding.** Enable "Connect with 1Password CLI" in the 1Password desktop app's Developer settings, then grant `~/Library/Group Containers/2BUA8C4S2C.com.1password/t/s.sock` in `nono-ai-base.json`. `op` inside the sandbox calls the desktop app via the socket; each call prompts Touch ID on the host. No long-lived token in sandbox memory.
+
+Option 1 is simpler to wire up; option 2 is closer to the principle of "the sandbox holds no usable credentials at rest."
 
 ## Per-CLI profile composition
 
@@ -63,18 +67,18 @@ All three CLIs extend `nono-ai-base` which sets the project-wide rules. Per-CLI 
 - LLM/MCP domain allow-list additions.
 - For OpenCode and Continue, a pinned OAuth callback port.
 
-Claude Code additionally pulls in nono's bundled `claude_code_macos` policy group (which adds reasonable Claude Code defaults that we don't have to maintain) and the `claude-code` network profile.
+Claude Code additionally pulls in nono's bundled `claude_code_macos` policy group (which adds reasonable Claude Code defaults that we don't have to maintain). The bundled `claude-code` network profile is **not** used: it registered managed-credential routes for anthropic/github/gitlab that produced unsilenceable "credential not found" warnings on every run (Claude Code uses OAuth, not API key, and we don't push to git from the sandbox). Instead the profile lists Anthropic / claude.ai / MCP-gateway hosts explicitly in `allow_domain`.
 
-The profiles are JSONC (JSON with comments), under 50 lines each. Inheritance is shallow — one level deep. There is no profile-of-profiles or runtime override; if a project needs a tighter or looser policy, create a new profile that extends `nono-ai-base` and run `nono run --profile <new-name> -- <cli>` directly.
+The profiles are plain JSON (nono v0.57's parser rejects JSONC `//` comments), under 50 lines each. Profile-internal documentation lives in `meta.description`. Inheritance is shallow — one level deep. There is no profile-of-profiles or runtime override; if a project needs a tighter or looser policy, create a new profile that extends `nono-ai-base` and run `nono run --profile <new-name> -- <cli>` directly.
 
 ## Open verification items
 
 These were not fully confirmed against the nono docs at design time and should be checked during the first end-to-end run:
 
 - Whether `listen_port` accepts a fixed integer (assumed) or a range. If ranges work, widen OpenCode/Continue to a small range (e.g., `49152-49199`) for easier interleaving; if not, pinned single ports are the alternative.
-- Whether nono's bundled `claude-code` network profile already includes `claude.ai`. The explicit `allow_domain` in `nono-ai-claude.jsonc` covers this regardless.
-- Whether the `homebrew` policy group grants read-only access to `/opt/homebrew`. If it grants writes, replace with a narrower explicit entry.
-- Whether `env_credentials` resolves the `op://` URI via the macOS 1Password desktop app and not via `OP_SERVICE_ACCOUNT_TOKEN` (which would be circular, since that's the variable being injected).
+- Whether nono's bundled `claude-code` network profile already includes `claude.ai`. The explicit `allow_domain` in `nono-ai-claude.json` covers this regardless.
+- Whether the `homebrew_macos` policy group grants read-only access to `/opt/homebrew`. If it grants writes, replace with a narrower explicit entry.
+- (resolved) `env_credentials` was rejected by nono for `OP_SERVICE_ACCOUNT_TOKEN` regardless of source; the mapping was removed. See "Why no 1Password credentials are injected by default" above.
 
 ## What is NOT carried over from colima-docker-ai
 
@@ -88,4 +92,4 @@ These were not fully confirmed against the nono docs at design time and should b
 | Separate `container-claude.json` file bind | `~/.claude.json` shared with host install. |
 | UID/GID matching (501:20) | Processes run as the user. |
 | 1Password debsig signature verification | `op` is host-installed via brew. |
-| Env-inheritance / stdin-pipe token transport | `env_credentials` does this natively. |
+| Env-inheritance / stdin-pipe token transport | nono blocks the master service-account token outright; no replacement injection. Sandboxed `op` is opt-in (see "Why no 1Password credentials are injected by default"). |

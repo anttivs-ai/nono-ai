@@ -1,0 +1,24 @@
+{
+  "$schema": "./nono-profile.schema.json",
+  "extends": "default",
+  "meta": {
+    "name": "nono-ai-install",
+    "description": "Install hardening profile: used by `make update` to run `npm install -g` inside a sandbox that allows writes only to the npm prefix and network only to the npm registry. Combined with --ignore-scripts this neuters the postinstall-hook supply-chain attack vector. Even if a published package's runtime JS is compromised, that JS runs later under the per-CLI profile, not under this install profile."
+  },
+  "groups": {
+    "include": ["node_runtime", "homebrew_macos"],
+    "exclude": ["dangerous_commands"]
+  },
+  "filesystem": {
+    "allow": [
+      "$HOME/.local/share/nono-ai/npm",
+      "$TMPDIR"
+    ]
+  },
+  "network": {
+    "allow_domain": ["registry.npmjs.org"]
+  },
+  "environment": {
+    "allow_vars": ["PATH", "HOME", "USER", "SHELL", "TMPDIR", "TERM", "npm_config_*"]
+  }
+}

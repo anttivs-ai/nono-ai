@@ -26,10 +26,12 @@
 #                            other's output otherwise).
 #
 # All entry points are thin wrappers around `nono run --profile <name> --`.
-# nono fetches the 1Password service-account token via env_credentials at
-# process startup, so there is no shell-side `op read` and no `OP_ITEM`
-# override (edit the env_credentials key in nono-ai-base.jsonc if you need
-# a different vault entry).
+# No 1Password credentials are injected into the sandbox by default: nono
+# blocks the master OP_SERVICE_ACCOUNT_TOKEN as a dangerous variable, and
+# the desktop CLI socket is not forwarded. `op` inside a sandboxed CLI
+# therefore won't work until either the desktop agent socket is granted
+# in nono-ai-base.json or narrow per-secret env_credentials entries are
+# added (see CLAUDE.md for context).
 
 # Remember our own directory so nono-ai-model can find its sibling Python
 # script regardless of where the repo is cloned. ${(%):-%x} expands to the
@@ -40,8 +42,15 @@ typeset -g _NONO_AI_PREFIX="$HOME/.local/share/nono-ai/npm"
 # Per-CLI launchers. Pass any args straight through to the underlying CLI so
 # `nono-claude /login`, `nono-opencode mcp auth consensus`, etc. work as
 # expected. nono itself prints a brief banner unless --silent.
+#
+# Source of each CLI binary:
+#   nono-claude    -> /opt/homebrew/bin/claude (Homebrew package `claude-code`).
+#                     The Homebrew install is the single canonical Claude Code
+#                     on this host; the npm prefix no longer carries a copy.
+#   nono-opencode  -> $_NONO_AI_PREFIX/bin/opencode (isolated npm prefix).
+#   nono-cn        -> $_NONO_AI_PREFIX/bin/cn       (isolated npm prefix).
 nono-claude() {
-  nono run --profile nono-ai-claude    -- "$_NONO_AI_PREFIX/bin/claude"   "$@"
+  nono run --profile nono-ai-claude    -- /opt/homebrew/bin/claude            "$@"
 }
 
 nono-opencode() {

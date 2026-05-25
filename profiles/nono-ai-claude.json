@@ -1,0 +1,22 @@
+{
+  "$schema": "./nono-profile.schema.json",
+  "extends": "nono-ai-base",
+  "meta": {
+    "name": "nono-ai-claude",
+    "description": "Profile for Claude Code (Homebrew binary at /opt/homebrew/bin/claude), sharing all state with the host's Claude Code install (~/.claude.json, ~/.claude/). Network: `allow_domain: [\"*\"]` lets the proxy pass any outbound HTTPS host (so WebFetch and ad-hoc MCP research work without per-host curation). The proxy is still on the egress path — `network_profile: null` would disable it entirely and break all network. Filesystem deny groups in nono-ai-base remain the primary defense."
+  },
+  "groups": { "include": ["claude_code_macos"] },
+  "filesystem": {
+    "allow": [
+      "$HOME/.claude",
+      "$HOME/.config/claude-code",
+      "$HOME/.cache/uv",
+      "$HOME/.local/share/uv",
+      "$HOME/Library/Application Support/Dash"
+    ],
+    "allow_file": ["$HOME/.claude.json"]
+  },
+  "network": {
+    "allow_domain": ["*"]
+  }
+}

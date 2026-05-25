@@ -1,0 +1,25 @@
+{
+  "$schema": "./nono-profile.schema.json",
+  "extends": "nono-ai-base",
+  "meta": {
+    "name": "nono-ai-opencode",
+    "description": "Profile for OpenCode. listen_port pins a single OAuth callback port (49152) that OpenCode must be configured to bind to (see README 'OAuth callback ports')."
+  },
+  "filesystem": {
+    "allow": [
+      "$HOME/.config/opencode",
+      "$HOME/.local/share/opencode",
+      "$HOME/.local/state/opencode"
+    ]
+  },
+  "network": {
+    "allow_domain": [
+      "claude.ai",
+      "api.anthropic.com",
+      "consensus.app",
+      "selfdecode.com",
+      "learning.oreilly.com"
+    ],
+    "listen_port": [49152]
+  }
+}

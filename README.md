@@ -51,7 +51,7 @@ Each CLI sees:
 
 - **Read+write** to `~/Documents/ai` (working dir), its own state dir, and the npm prefix (read-only).
 - **Network** to its LLM provider, MCP OAuth hosts, 1Password, and host loopback (Ollama on 127.0.0.1:11434).
-- **Env vars** PATH/HOME/USER/SHELL/TERM/LANG/LC_*/TMPDIR/OLLAMA_HOST, plus an injected `OP_SERVICE_ACCOUNT_TOKEN` fetched from 1Password by nono itself.
+- **Env vars** PATH/HOME/USER/SHELL/TERM/LANG/LC_*/TMPDIR/OLLAMA_HOST. No 1Password credentials are injected by default (nono blocks the master service-account token); sandboxed `op` requires either desktop-CLI socket forwarding or per-secret narrow `env_credentials` entries.
 
 Everything else — `~/.ssh`, `~/.aws`, keychain, browser data, shell history, `~/.zshrc`, the rest of `$HOME` — is blocked by the kernel. Even if a CLI tries, the syscall fails.
 
@@ -78,7 +78,7 @@ nono-ai-model select qwen3-coder:30b    # set as default in both configs
 
 OpenCode listens on `127.0.0.1:49152` for its OAuth callback; Continue listens on `49153`. The browser callback URL the OAuth provider redirects to must match. If a CLI tries a different port, the sandbox blocks the bind and the OAuth flow fails with a connection-refused error.
 
-To change a port, edit the `listen_port` array in `profiles/nono-ai-opencode.jsonc` (or `nono-ai-continue.jsonc`) and re-run `make profiles`.
+To change a port, edit the `listen_port` array in `profiles/nono-ai-opencode.json` (or `nono-ai-continue.json`) and re-run `make profiles`.
 
 ## Coexistence with colima-docker-ai
 

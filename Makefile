@@ -18,7 +18,7 @@ install: profiles update
 # `extends: nono-ai-base` by looking here.
 profiles:
 	mkdir -p $(PROFILES_DIR)
-	cp profiles/*.jsonc $(PROFILES_DIR)/
+	cp profiles/*.json $(PROFILES_DIR)/
 
 # Rebuild the dedicated, isolated npm prefix from scratch. The install runs
 # inside the `nono-ai-install` profile:
@@ -31,14 +31,16 @@ profiles:
 update:
 	rm -rf $(PREFIX) && mkdir -p $(PREFIX)
 	nono run --profile nono-ai-install -- \
-	  npm install --prefix=$(PREFIX) --global --ignore-scripts \
-	    @anthropic-ai/claude-code @continuedev/cli opencode-ai
+	  npm install --prefix=$(PREFIX) --cache=$(PREFIX)/cache --global --ignore-scripts \
+	    @continuedev/cli opencode-ai
 
-# Per-CLI run targets. nono's env_credentials block in nono-ai-base.jsonc
-# fetches OP_SERVICE_ACCOUNT_TOKEN from 1Password at process startup, so there
-# is no host-side `op read` step here (unlike the colima-docker-ai Makefile).
+# Per-CLI run targets. No 1Password credentials are injected into the sandbox
+# (nono blocks the master service-account token, and the desktop-CLI socket
+# is not forwarded by default). To use `op` inside a sandboxed CLI, either
+# add narrow per-secret entries under `env_credentials` in nono-ai-base.json
+# or forward the 1Password desktop agent socket.
 claude:
-	nono run --profile nono-ai-claude    -- $(PREFIX)/bin/claude
+	nono run --profile nono-ai-claude    -- /opt/homebrew/bin/claude
 
 opencode:
 	nono run --profile nono-ai-opencode  -- $(PREFIX)/bin/opencode
@@ -50,7 +52,7 @@ continue:
 # nono on purpose: --version doesn't need any of the sandboxed paths, and
 # a failure here means the install itself is broken (not a profile mistake).
 check:
-	$(PREFIX)/bin/claude --version
+	/opt/homebrew/bin/claude --version
 	$(PREFIX)/bin/opencode --version
 	$(PREFIX)/bin/cn --version
 

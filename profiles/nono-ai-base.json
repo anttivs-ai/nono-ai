@@ -1,0 +1,40 @@
+{
+  "$schema": "./nono-profile.schema.json",
+  "extends": "default",
+  "meta": {
+    "name": "nono-ai-base",
+    "description": "Common ancestor for all nono-ai CLI profiles. Per-CLI profiles extend this and add their tool-specific filesystem and network rules. See CLAUDE.md for architecture; see `nono profile groups` for what each included policy group grants or denies."
+  },
+  "groups": {
+    "include": [
+      "node_runtime",
+      "homebrew_macos",
+      "user_tools",
+      "deny_credentials",
+      "deny_keychains_macos",
+      "deny_browser_data_macos",
+      "deny_macos_private",
+      "deny_shell_history",
+      "deny_shell_configs"
+    ]
+  },
+  "filesystem": {
+    "read": ["$HOME/.local/share/nono-ai/npm"],
+    "allow": ["$HOME/Documents/ai"]
+  },
+  "environment": {
+    "allow_vars": [
+      "PATH", "HOME", "USER", "SHELL", "TERM",
+      "LANG", "LC_*",
+      "TMPDIR",
+      "OLLAMA_HOST"
+    ]
+  },
+  "network": {
+    "allow_domain": [
+      "my.1password.com",
+      "events.1password.com"
+    ],
+    "open_port": [11434, 8765]
+  }
+}
