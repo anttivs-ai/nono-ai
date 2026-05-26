@@ -3,23 +3,40 @@
   "extends": "nono-ai-base",
   "meta": {
     "name": "nono-ai-opencode",
-    "description": "Profile for OpenCode. listen_port pins a single OAuth callback port (49152) that OpenCode must be configured to bind to (see README 'OAuth callback ports')."
+    "description": "Profile for the OpenCode CLI (binary lives in the isolated npm prefix at $HOME/.local/share/nono-ai/npm/bin/opencode; the host PATH does not include this prefix). Filesystem allow-list covers OpenCode's four XDG dirs: $HOME/.config/opencode (config.yaml/json, AGENTS.md, rules), $HOME/.local/share/opencode (logs, mcp-auth, sqlite db, repos snapshot), $HOME/.local/state/opencode (per-session state — created on startup), $HOME/.cache/opencode (Bun runtime cache, also created on startup). All four MUST exist on the host before launch: nono v0.57 silently drops non-existent paths from the effective capabilities, so a missing $HOME/.cache/opencode (for instance) causes opencode to EPERM on its first mkdir even though the path is listed here. `make state` (run as part of `make install`) pre-creates them. The additional `$HOME/.cache/uv` and `$HOME/.local/share/uv` are uvx's cache and install dirs, granted so the local `dash` stdio MCP server (invoked as `uvx --offline dash-mcp-server`) can run; `$HOME/Library/Application Support/Dash` is granted read-only so dash-mcp-server can enumerate installed docsets. The `--offline` flag in the MCP command line skips uvx's PyPI metadata check (PyPI is intentionally not in allow_domain); to update the cached dash-mcp-server, run `uvx dash-mcp-server` outside the sandbox. Network `allow_domain` lists hostnames OpenCode reaches: Anthropic / claude.ai for cloud models, the MCP-gateway endpoints (mcp.consensus.app, api.oreilly.com, mcp.context7.com), AND the corresponding OAuth issuer hostnames (consensus.app for Consensus; api.oreilly.com doubles as both for O'Reilly) — silent-refresh POSTs go to the issuer, not the MCP endpoint, so listing only the MCP host breaks token refresh while leaving runtime calls working. nono `allow_domain` is exact-host match, not suffix match (verified via `nono why`); list each subdomain explicitly. `open_urls.allow_origins` lists the OAuth authorization endpoints OpenCode may ask the supervisor to open in the user's browser (full OAuth dance when refresh token also expires). Without an `open_urls` entry, `_LSOpenURLsWithCompletionHandler` returns error -54 and the OAuth flow hangs at 'Starting OAuth flow'. SelfDecode MCP is intentionally absent: its server only supports Claude as the underlying model. Loopback 11434 for Ollama comes from nono-ai-base. listen_port pins a single OAuth callback port (49152) so OpenCode's OAuth provider redirects are predictable."
   },
   "filesystem": {
     "allow": [
       "$HOME/.config/opencode",
       "$HOME/.local/share/opencode",
-      "$HOME/.local/state/opencode"
+      "$HOME/.local/state/opencode",
+      "$HOME/.cache/opencode",
+      "$HOME/.cache/uv",
+      "$HOME/.local/share/uv"
+    ],
+    "read": [
+      "$HOME/Library/Application Support/Dash"
     ]
   },
   "network": {
     "allow_domain": [
       "claude.ai",
       "api.anthropic.com",
+      "mcp.consensus.app",
       "consensus.app",
-      "selfdecode.com",
-      "learning.oreilly.com"
+      "api.oreilly.com",
+      "mcp.context7.com"
     ],
     "listen_port": [49152]
-  }
+  },
+  "open_urls": {
+    "allow_origins": [
+      "https://consensus.app",
+      "https://api.oreilly.com",
+      "https://mcp.context7.com",
+      "https://context7.com"
+    ],
+    "allow_localhost": false
+  },
+  "allow_launch_services": true
 }

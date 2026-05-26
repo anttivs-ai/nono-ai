@@ -10,20 +10,29 @@
 #   nono-opencode  [args]    Launch OpenCode under the nono-ai-opencode profile.
 #   nono-cn        [args]    Launch Continue CLI under the nono-ai-continue profile.
 #
-#   nono-ai-up               Start Ollama on the host (idempotent). Replaces the
-#                            colima-docker-ai `ai-up` (no VM, no relays).
+#   nono-opencode-auth <mcp>    Re-authenticate an OpenCode MCP server (browser flow).
+#                               Pairs --allow-launch-services with the profile so the
+#                               sandboxed CLI may open a URL via macOS LaunchServices.
+#   nono-cn-auth   [args]       cn equivalent — same LaunchServices gate enabled.
+#                               Use these sparingly: --allow-launch-services widens
+#                               the sandbox beyond URL-opening. Switch back to plain
+#                               nono-opencode / nono-cn once tokens are refreshed.
+#
+#   nono-ai-up               Start Ollama on the host (idempotent). The CLIs
+#                            run on the host under nono, so they reach the
+#                            daemon directly on 127.0.0.1:11434 — no VM and
+#                            no relays in the path.
 #   nono-ai-down             Stop Ollama on the host.
 #   nono-ai-update           Rebuild the isolated npm prefix (calls `make update`
-#                            in the repo, which runs npm install inside nono).
+#                            in the repo, which runs npm install inside nono
+#                            and then runs opencode-ai's postinstall under the
+#                            same install profile so its real platform binary
+#                            replaces the published stub).
 #   nono-ai-model add|remove|select|list
 #                            Manage local Ollama models and sync to both
 #                            ~/.config/opencode/opencode.json and
-#                            ~/.continue/config.yaml. Names are prefixed
-#                            `nono-ai-*` so they don't collide with the
-#                            colima-docker-ai shell helpers during coexistence
-#                            (the two scripts write different `apiBase` URLs
-#                            into the Continue config and would corrupt each
-#                            other's output otherwise).
+#                            ~/.continue/config.yaml. The `nono-ai-` prefix is
+#                            kept purely as a namespacing convention.
 #
 # All entry points are thin wrappers around `nono run --profile <name> --`.
 # No 1Password credentials are injected into the sandbox by default: nono
@@ -57,8 +66,30 @@ nono-opencode() {
   nono run --profile nono-ai-opencode  -- "$_NONO_AI_PREFIX/bin/opencode" "$@"
 }
 
+# OAuth-aware variant: pairs the profile's allow_launch_services: true with
+# the `--allow-launch-services` CLI gate so opencode can call `open <URL>`
+# during the full OAuth dance. Only needed when an MCP's refresh-token
+# grant has also expired (the silent refresh path doesn't need this).
+# Usage:  nono-opencode-auth consensus
+nono-opencode-auth() {
+  nono run --profile nono-ai-opencode --allow-launch-services -- "$_NONO_AI_PREFIX/bin/opencode" mcp auth "$@"
+}
+
 nono-cn() {
-  nono run --profile nono-ai-continue  -- "$_NONO_AI_PREFIX/bin/cn"       "$@"
+  # `--config` is passed unconditionally to bypass cn's hub-based assistant
+  # onboarding (the "Log in with Continue / Enter Anthropic API key" prompt
+  # that ignores ~/.continue/config.yaml until you've authenticated to the
+  # hub or supplied an Anthropic key). Pointing at the local YAML makes cn
+  # use it directly. Anything in "$@" follows and can override.
+  nono run --profile nono-ai-continue  -- "$_NONO_AI_PREFIX/bin/cn" --config "$HOME/.continue/config.yaml" "$@"
+}
+
+# OAuth-aware variant for cn. cn has no explicit `auth` subcommand; OAuth
+# fires when an MCP returns 401 mid-session. Use this when you know an
+# MCP refresh has fully expired and the full browser dance is needed.
+# Pass the prompt (or no args for interactive) as usual.
+nono-cn-auth() {
+  nono run --profile nono-ai-continue --allow-launch-services -- "$_NONO_AI_PREFIX/bin/cn" --config "$HOME/.continue/config.yaml" "$@"
 }
 
 # Rebuild the npm prefix. Delegates to the Makefile so the install profile
@@ -99,10 +130,9 @@ nono-ai-down() {
 }
 
 # Pull / remove local Ollama models and sync them into the two host config
-# files the sandboxed CLIs consume. The forked ai-model.py writes
-# `apiBase: http://127.0.0.1:11434` into Continue entries (vs the Docker
-# setup's `host.docker.internal`), so coexist carefully if you also use the
-# colima-docker-ai `ai-model` function.
+# files the sandboxed CLIs consume. ai-model.py writes `apiBase:
+# http://127.0.0.1:11434` into Continue entries — the CLIs run directly on
+# the host under nono, so host loopback is the right address.
 nono-ai-model() {
   command -v uvx >/dev/null || {
     echo "nono-ai-model: uvx not installed (brew install uv)" >&2

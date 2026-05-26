@@ -3,19 +3,35 @@
   "extends": "nono-ai-base",
   "meta": {
     "name": "nono-ai-continue",
-    "description": "Profile for Continue CLI (cn). Mirrors the opencode profile structurally with a distinct ~/.continue state dir and a distinct OAuth callback port (49153)."
+    "description": "Profile for the Continue CLI `cn` (binary lives in the isolated npm prefix at $HOME/.local/share/nono-ai/npm/bin/cn; the host PATH does not include this prefix). Filesystem allow-list covers $HOME/.continue, which holds config.yaml, permissions.yaml, rules/, sessions/, dev_data/, and the local index — Continue keeps all of its state under a single dir, unlike OpenCode's XDG split. The dir MUST exist on the host before launch: nono v0.57 silently drops non-existent paths from the effective capabilities, so a fresh-host run without `make state` (which `make install` invokes) will EPERM on the first mkdir. `$HOME/.cache/uv` and `$HOME/.local/share/uv` are uvx's cache and install dirs, granted so the local `dash` stdio MCP server (invoked as `uvx --offline dash-mcp-server`) can run; `$HOME/Library/Application Support/Dash` is granted read-only so dash-mcp-server can enumerate installed docsets. The `--offline` flag in the MCP command line skips uvx's PyPI metadata check (PyPI is intentionally not in allow_domain); to update the cached dash-mcp-server, run `uvx dash-mcp-server` outside the sandbox. Network `allow_domain` lists hostnames cn reaches: Anthropic / claude.ai, the MCP-gateway endpoints (mcp.consensus.app, api.oreilly.com), AND the corresponding OAuth issuer hostnames (consensus.app; api.oreilly.com doubles as both) — silent-refresh POSTs go to the issuer, not the MCP endpoint, so listing only the MCP host breaks token refresh. nono `allow_domain` is exact-host match, not suffix match (verified via `nono why`); list each subdomain explicitly. `open_urls.allow_origins` covers the OAuth authorization endpoints the supervisor is allowed to open in the user's browser when the refresh-token grant has also expired (full OAuth dance). cn aborts the entire session on any MCP load failure, so a missing allow_domain or open_urls entry breaks the CLI hard rather than degrading gracefully (opencode silently swallows the same failure). SelfDecode MCP is intentionally absent: its server only supports Claude as the underlying model. Loopback 11434 for Ollama comes from nono-ai-base. listen_port pins three callback ports: 49153 for cn's own OAuth (Continue hub), and 49154/49155 for spawned mcp-remote subprocesses (Continue wraps each `streamable-http` MCP through a `npx mcp-remote <url>` call internally; rather than allow npm registry from the runtime sandbox we install mcp-remote into the nono-ai npm prefix via `make update` and invoke it directly from cn's config.yaml with an explicit callback port matching one of these listen_port entries). `$HOME/.mcp-auth` in filesystem.allow is where mcp-remote stores its OAuth tokens (a separate token store from cn's own / OpenCode's). All distinct from OpenCode's 49152."
   },
   "filesystem": {
-    "allow": ["$HOME/.continue"]
+    "allow": [
+      "$HOME/.continue",
+      "$HOME/.cache/uv",
+      "$HOME/.local/share/uv",
+      "$HOME/.mcp-auth"
+    ],
+    "read": [
+      "$HOME/Library/Application Support/Dash"
+    ]
   },
   "network": {
     "allow_domain": [
       "claude.ai",
       "api.anthropic.com",
+      "mcp.consensus.app",
       "consensus.app",
-      "selfdecode.com",
-      "learning.oreilly.com"
+      "api.oreilly.com"
     ],
-    "listen_port": [49153]
-  }
+    "listen_port": [49153, 49154, 49155]
+  },
+  "open_urls": {
+    "allow_origins": [
+      "https://consensus.app",
+      "https://api.oreilly.com"
+    ],
+    "allow_localhost": false
+  },
+  "allow_launch_services": true
 }

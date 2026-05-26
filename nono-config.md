@@ -1,6 +1,6 @@
 # Design notes
 
-Companion to `CLAUDE.md` and `README.md`. CLAUDE.md is the operational reference for AI tools; this file explains *why* the design is shaped the way it is. Analogue of `docker-config.md` in the sister repo.
+Companion to `CLAUDE.md` and `README.md`. CLAUDE.md is the operational reference for AI tools; this file explains *why* the design is shaped the way it is. nono-ai was branched from the sister `colima-docker-ai` repo, which still exists; cross-references compare design choices between the two.
 
 ## Threat model
 
@@ -14,14 +14,14 @@ A user-installed AI CLI (Claude Code, OpenCode, Continue) runs as the user. It i
 
 This addresses (3) directly and most of (1)/(2) by limiting what an in-flight compromise can reach. It does not provide memory isolation; a kernel exploit or a vulnerability in nono itself would defeat it. For mutually-untrusted workloads a VM is still the right tool.
 
-## Why this is preferable to the colima-docker-ai design for this use case
+## Why this design instead of the colima-docker-ai one
 
-The colima-docker-ai repo wraps the same threat model in a Linux VM + Docker container. That works, but pays heavy costs:
+The sister `colima-docker-ai` repo wraps the same threat model in a Linux VM + Docker container. That design works and continues to be maintained there; it pays a heavier cost:
 
 - A Linux VM running on the user's laptop, with separate filesystem, network, and process spaces.
 - Three `socat` relays per session bridging the VM's bridge IP back to host loopback (Ollama, avs-rag, a Dash MCP HTTP wrapper).
-- A separate `~/.claude.json` (file-bind from `~/.config/colima-docker-ai/container-claude.json`) because the host and container needed different Dash MCP URLs.
-- A `--network host` mode (`make auth`) used solely to complete OAuth flows whose localhost callbacks couldn't otherwise reach the container.
+- A separate `~/.claude.json` (file-bind from `~/.config/colima-docker-ai/container-claude.json`) because the host and container need different Dash MCP URLs.
+- A `--network host` mode (`make auth`) used solely to complete OAuth flows whose localhost callbacks can't otherwise reach the container.
 - A `--no-cache --pull` Docker rebuild on every update (3-5 minutes).
 - A UID/GID dance (501:20) so virtiofs preserves file ownership.
 
@@ -35,6 +35,21 @@ nono runs the CLI directly on the host with a kernel-enforced allow-list. As a r
 - No UID/GID gymnastics — all processes run as the user.
 
 The trade-off: kernel sandboxing controls filesystem and network access but not memory; a Docker container provides slightly stronger isolation against kernel-adjacent attacks. For the threat model described above (a CLI doing things it shouldn't, not a hostile attacker with arbitrary code execution targeting the kernel), this is the right trade.
+
+### Side-by-side mechanism comparison
+
+| What | colima-docker-ai | nono-ai |
+| --- | --- | --- |
+| Sandbox | Colima VM + Docker container | macOS Seatbelt via nono |
+| Filesystem isolation | virtiofs allowlist mounts | profile `filesystem.allow/read/write` |
+| Network isolation | bridge + three socat relays | profile `network.allow_domain` + `open_port` |
+| Host loopback | socat relay → 127.0.0.1 | direct (CLI is on host) |
+| `~/.claude.json` | bind to container-claude.json | shared with host install |
+| OAuth callbacks | `make auth` with `--network host` | `listen_port` (49152/49153) |
+| Dash MCP | mcp-proxy HTTP wrapper | direct stdio (Claude Code only) |
+| 1Password token | `op read` + env-inherit to docker | not injected; opt-in path required |
+| Update | `make build` (3-5 min Docker rebuild) | `make update` (npm install + postinstall) |
+| Supply-chain | debsig + npm install scripts allowed | `--ignore-scripts` + sandboxed install |
 
 ## Supply chain hardening for npm
 
@@ -79,6 +94,8 @@ These were not fully confirmed against the nono docs at design time and should b
 - Whether nono's bundled `claude-code` network profile already includes `claude.ai`. The explicit `allow_domain` in `nono-ai-claude.json` covers this regardless.
 - Whether the `homebrew_macos` policy group grants read-only access to `/opt/homebrew`. If it grants writes, replace with a narrower explicit entry.
 - (resolved) `env_credentials` was rejected by nono for `OP_SERVICE_ACCOUNT_TOKEN` regardless of source; the mapping was removed. See "Why no 1Password credentials are injected by default" above.
+- (resolved) nono v0.57 silently drops not-yet-existing host paths from a profile's effective capabilities — confirmed during the first end-to-end opencode run, which EPERMed on `~/.cache/opencode` even though the profile listed it. The Makefile's `state` target (run as part of `make install`) pre-creates the per-CLI XDG dirs to make this deterministic.
+- (resolved) opencode-ai's npm tarball ships only stub binaries; the published `bin/opencode` and `bin/opencode.exe` are 479-byte error stubs printed by an error script. The real ~107 MB platform binary is placed by `postinstall.mjs`, which `--ignore-scripts` blocks. The Makefile's `update` target now invokes that postinstall explicitly under `nono-ai-install` after the npm install completes.
 
 ## What is NOT carried over from colima-docker-ai
 

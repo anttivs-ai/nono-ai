@@ -7,11 +7,6 @@ Touches:
   * ~/.config/opencode/opencode.json   — provider.ollama.models map
   * ~/.continue/config.yaml            — models: list (preserving comments)
 
-Forked from colima-docker-ai/shell/ai-model.py. The only behavioural
-difference is CONTINUE_API_BASE: in the Docker setup it was
-`http://host.docker.internal:11434` (the bridge hostname injected by Docker's
-DNS); under nono the CLI runs directly on the host, so it must be 127.0.0.1.
-
 Usage:
   ai-model add    <model[:tag]>            # ollama pull, add to both configs
   ai-model remove <model[:tag]>            # remove from both configs, ollama rm
@@ -62,11 +57,11 @@ except ImportError:
 OPENCODE_CONFIG = Path.home() / ".config/opencode/opencode.json"
 CONTINUE_CONFIG = Path.home() / ".continue/config.yaml"
 
-# Continue's `apiBase` for any new Ollama model entry. Under nono the CLI
-# runs directly on the host, so host loopback IS reachable as 127.0.0.1 —
-# no bridge hostname needed (Docker's `host.docker.internal` won't resolve).
-# If you switch back to colima-docker-ai temporarily, expect Continue to
-# fail until this value is reverted.
+# Continue's `apiBase` for any new Ollama model entry. The cn binary runs
+# directly on the host under nono, so host loopback is reachable as
+# 127.0.0.1 — no bridge hostname needed. nono-ai-base grants outbound
+# loopback on port 11434, which is what permits the request to reach the
+# host's Ollama daemon from inside the sandbox.
 CONTINUE_API_BASE = "http://127.0.0.1:11434"
 
 
@@ -74,7 +69,7 @@ def _yaml() -> YAML:
     # Build a YAML instance configured for round-trip mode (the default).
     # `preserve_quotes` keeps quote-style on string scalars; without it ruamel
     # may strip quotes the user explicitly wrote. `width = 4096` effectively
-    # disables line wrapping so our long URLs (e.g. host.docker.internal/mcp)
+    # disables line wrapping so long URLs (e.g. MCP gateway endpoints)
     # don't get folded across lines, which would change diff noise on edits.
     y = YAML()
     y.preserve_quotes = True
