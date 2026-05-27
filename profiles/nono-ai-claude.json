@@ -10,9 +10,12 @@
     "allow": [
       "$HOME/.claude",
       "$HOME/.config/claude-code",
+      "$HOME/.config/gh",
+      "$HOME/.config/git",
       "$HOME/.cache/uv",
       "$HOME/.local/share/uv",
-      "$HOME/Library/Application Support/Dash"
+      "$HOME/Library/Application Support/Dash",
+      "$HOME/.gitconfig"
     ],
     "allow_file": ["$HOME/.claude.json"]
   },
