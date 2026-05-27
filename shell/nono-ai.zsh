@@ -99,15 +99,61 @@ nono-ai-update() {
   make -C "${_NONO_AI_DIR:h}" update
 }
 
+# Push the current shell's OLLAMA_* env vars into launchd's user-session env
+# so brew-services-spawned ollama daemons inherit them. Without this, an
+# OLLAMA_CONTEXT_LENGTH (etc.) exported in .zshrc would affect direct CLI
+# calls (shells inherit env) but NOT the brew-managed daemon (which launchd
+# spawns with only its own env — shells aren't in that ancestry).
+#
+# Reboot caveat: launchd restarts brew-managed services before any
+# interactive shell exists, so on first boot the daemon comes up with
+# whatever launchctl had at shutdown (often nothing). Open a shell and run
+# `nono-ai-down && nono-ai-up` to refresh both launchctl and the daemon.
+# The alternative — a permanent ~/Library/LaunchAgents/ plist — was rejected
+# in favour of keeping host-side state out of $HOME and centralised in this
+# file + the user's .zshrc.
+_nono-ai-sync-ollama-env() {
+  local var
+  # zsh-only: ${(k)parameters[(I)glob]} enumerates parameter names matching
+  # the glob; ${(P)var} is indirect expansion (value of the var named in $var).
+  for var in ${(k)parameters[(I)OLLAMA_*]}; do
+    /bin/launchctl setenv "$var" "${(P)var}"
+  done
+}
+
+# Wrap the brew-installed `ollama` so any subcommand syncs launchd's env
+# first. Cheap — `launchctl setenv` is one syscall per var — and means a
+# stray `ollama serve` or in-shell `brew services restart ollama` always
+# picks up current .zshrc values rather than stale launchd defaults.
+# Bypass with `command ollama ...` when needed (e.g. measuring CLI latency).
+ollama() {
+  _nono-ai-sync-ollama-env
+  command ollama "$@"
+}
+
 # Start Ollama on the host. Idempotent — already-listening Ollama is a no-op.
+# Syncs OLLAMA_* env into launchd before starting so the new daemon inherits
+# them. If ollama is already listening, env is still refreshed but the daemon
+# keeps whatever env it started with — `nono-ai-down && nono-ai-up` to apply
+# .zshrc changes to a running daemon.
+#
+# `brew services run` (not `start`) intentionally: `run` launches the daemon
+# for this macOS session only and does NOT install a persistent LaunchAgent
+# under ~/Library/LaunchAgents/. So ollama starts only when this function is
+# called — never automatically at login. A reboot leaves ollama stopped until
+# the next `nono-ai-up`. If you previously used `brew services start ollama`
+# (here or by hand), run `brew services stop ollama` once to remove the
+# leftover LaunchAgent.
+#
 # No colima, no dash-mcp wrapper, no socat relays: under nono everything runs
 # on the host so loopback is reachable as 127.0.0.1 directly.
 nono-ai-up() {
+  _nono-ai-sync-ollama-env
   if lsof -nP -iTCP:11434 -sTCP:LISTEN >/dev/null 2>&1; then
     echo "nono-ai-up: ollama already listening on 127.0.0.1:11434"
   else
-    brew services start ollama || {
-      echo "nono-ai-up: 'brew services start ollama' failed; start it manually" >&2
+    brew services run ollama || {
+      echo "nono-ai-up: 'brew services run ollama' failed; start it manually" >&2
       return 1
     }
   fi
